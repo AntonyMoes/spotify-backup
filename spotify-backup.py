@@ -50,7 +50,11 @@ class SpotifyAPI:
 	def list(self, url, params={}):
 		last_log_time = time.time()
 		response = self.get(url, params)
-		items = response['items']
+		try:
+		    items = response['items']
+		except KeyError:
+		    response = response['artists']
+		    items = response['items']
 
 		while response['next']:
 			if time.time() > last_log_time + 15:
@@ -149,7 +153,7 @@ def main():
 		spotify = SpotifyAPI(args.token)
 	else:
 		spotify = SpotifyAPI.authorize(client_id='5c098bcc800e45d49e476265bc9b6934',
-		                               scope='playlist-read-private playlist-read-collaborative user-library-read')
+		                               scope='playlist-read-private playlist-read-collaborative user-library-read user-follow-read')
 	
 	# Get the ID of the logged in user.
 	logging.info('Loading user info...')
@@ -158,12 +162,14 @@ def main():
 
 	playlists = []
 	liked_albums = []
+	liked_artists = []
 
 	# List liked albums and songs
 	if 'liked' in args.dump:
 		logging.info('Loading liked albums and songs...')
 		liked_tracks = spotify.list('users/{user_id}/tracks'.format(user_id=me['id']), {'limit': 50})
 		liked_albums = spotify.list('me/albums', {'limit': 50})
+		liked_artists = spotify.list('me/following', {'type': 'artist', 'limit': 50})
 		playlists += [{'name': 'Liked Songs', 'tracks': liked_tracks}]
 
 	# List all playlists and the tracks in each playlist
@@ -185,7 +191,8 @@ def main():
 		if args.format == 'json':
 			json.dump({
 				'playlists': playlists,
-				'albums': liked_albums
+				'albums': liked_albums,
+				'artists': liked_artists
 			}, f)
 		
 		# Tab-separated file.
@@ -214,6 +221,13 @@ def main():
 					album = f'{artists} - {name}'
 
 					f.write(f'{name}\t{artists}\t-\t{uri}\t{release_date}\r\n')
+				f.write('\r\n')
+			if len(liked_artists) > 0:
+				f.write('Liked Artists: \r\n\r\n')
+				for artist in liked_artists:
+					uri = artist['uri']
+					name = artist['name']
+					f.write(f'{name}\t{uri}\r\n')
 
 	logging.info('Wrote file: ' + args.file)
 
